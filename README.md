@@ -13,8 +13,8 @@ states. It supports cell-type-conditioned generation and
 perturbation-conditioned prediction while keeping the two modalities paired.
 
 > **Alpha release.** The flow model and raw-H5MU paper workflow are ready for
-> testing. The processed perturbation dataset is not yet hosted publicly; the
-> tutorial therefore requires a local path for that dataset.
+> testing. Both public datasets used by the tutorial are now available through
+> version-pinned downloads.
 
 ## Install
 
@@ -91,6 +91,27 @@ file only after verification.
 The upstream file contains the correct raw RNA counts and binary ATAC
 profiles. The tutorial splits it, trains the RNA VAE and ATAC AE, and runs
 `multiflow paper encode`; users do not create latent arrays manually.
+
+## GSE274113 perturbation data
+
+The processed paired perturbation data can also be downloaded directly:
+
+```bash
+multiflow data download gse274113 \
+  --output data/GSE274113_filtered.h5mu \
+  --accept-license
+```
+
+This is a version-pinned **31.15 GB** Zenodo download. MultiFlow verifies the
+published byte size and MD5 before making the file available at the requested
+path.
+
+- Version DOI: [10.5281/zenodo.21986866](https://doi.org/10.5281/zenodo.21986866)
+- All-versions DOI: [10.5281/zenodo.21986865](https://doi.org/10.5281/zenodo.21986865)
+- Source study: [GSE274113](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE274113)
+
+The complete leave-one-cell-type-out perturbation workflow is in the
+[tutorial](docs/tutorial.md#4-task-2-perturbation-prediction).
 
 ## Models
 

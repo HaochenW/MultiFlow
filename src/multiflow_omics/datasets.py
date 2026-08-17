@@ -30,7 +30,23 @@ OPENPROBLEM = DatasetFile(
     license="CC BY 4.0",
 )
 
-DATASETS = {OPENPROBLEM.name: OPENPROBLEM}
+GSE274113 = DatasetFile(
+    name="gse274113",
+    filename="GSE274113_filtered.h5mu",
+    url=(
+        "https://zenodo.org/records/21986866/files/"
+        "GSE274113_filtered.h5mu?download=1"
+    ),
+    size_bytes=31_154_968_237,
+    md5="b1aecf4d4cacf3328c0b3147426f5d16",
+    doi="10.5281/zenodo.21986866",
+    license="See the Zenodo record and the GSE274113 source-data terms",
+)
+
+DATASETS = {
+    OPENPROBLEM.name: OPENPROBLEM,
+    GSE274113.name: GSE274113,
+}
 
 
 def md5_file(path: str | os.PathLike[str], *, chunk_size: int = 8 * 1024 * 1024) -> str:

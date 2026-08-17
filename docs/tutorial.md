@@ -234,26 +234,27 @@ Bernoulli sample and therefore contains only 0 and 1.
 
 ### 4.1 Prepare the perturbation H5MU
 
-The paper uses processed GSE274113 paired multiome data. The processed H5MU is
-not currently hosted by this repository, so do not substitute OpenProblem:
+The paper uses processed GSE274113 paired multiome data. Download the exact
+version used by this tutorial from Zenodo. The file is 31.15 GB; the command
+supports resuming and verifies its byte size and MD5 before publishing it at
+the requested path:
 
 ```bash
-export PERTURBATION_H5MU=/path/to/GSE274113_filtered.h5mu
+multiflow data download gse274113 \
+  --output data/GSE274113_filtered.h5mu \
+  --accept-license
+
+export PERTURBATION_H5MU=data/GSE274113_filtered.h5mu
 multiflow data validate "$PERTURBATION_H5MU"
 ```
 
-For a public release, upload the processed file to Zenodo or Figshare, not
-GitHub. Upload these items together:
-
-- `GSE274113_filtered.h5mu`;
-- `SHA256SUMS.txt`;
-- `dataset_manifest.json` with cell, gene and peak counts, matrix scales,
-  feature identifiers, preprocessing version and required `obs` columns; and
-- `README_data.md` citing GSE274113 and describing peak merging and filtering.
-
-After the record receives a DOI, add its version-pinned URL, byte size and
-checksum to `src/multiflow_omics/datasets.py`. Until then, this tutorial uses a
-local path rather than a fabricated URL.
+The fixed dataset version is
+[Zenodo 10.5281/zenodo.21986866](https://doi.org/10.5281/zenodo.21986866);
+the DOI representing all current and future versions is
+[10.5281/zenodo.21986865](https://doi.org/10.5281/zenodo.21986865). The source
+study is [GSE274113](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE274113).
+Review the Zenodo record and source-data terms before passing
+`--accept-license`.
 
 ### 4.2 Train and run the perturbation encoder
 

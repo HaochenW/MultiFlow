@@ -57,8 +57,10 @@ CLI round trips.
   scDiffusion-X multimodal AE. Perturbation uses the multimodal AE for both raw
   RNA counts and binary ATAC. These task-specific scales are not interchangeable.
 - The release includes the audited RNA VAE architecture and wrappers around a
-  pinned scDiffusion-X checkout. It does not redistribute pretrained weights or
-  the processed GSE274113 H5MU.
+  pinned scDiffusion-X checkout. It does not bundle pretrained weights or large
+  data files. The processed GSE274113 H5MU is distributed separately through
+  the version-pinned Zenodo record
+  [10.5281/zenodo.21986866](https://doi.org/10.5281/zenodo.21986866).
 - `multiflow paper prepare-perturbation-fold` reproduces the executed notebook:
   it removes held-out non-control cells from flow training, retains held-out
   controls, and computes each cell-type context from all remaining flow-training
