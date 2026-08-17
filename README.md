@@ -3,6 +3,11 @@
 [![CI](https://github.com/liuq-lab/MultiFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/liuq-lab/MultiFlow/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+**Start here:** [Full tutorial](docs/tutorial.md) ·
+[H5MU contract](docs/h5mu_contract.md) ·
+[Model contract](docs/model_contract.md) ·
+[Implementation audit](docs/implementation_audit.md)
+
 MultiFlow learns a coupled vector field for paired single-cell RNA and ATAC
 states. It supports cell-type-conditioned generation and
 perturbation-conditioned prediction while keeping the two modalities paired.
