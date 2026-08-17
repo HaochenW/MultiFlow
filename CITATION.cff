@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use MultiFlow, please cite the software and the associated paper."
+title: "MultiFlow: coupled flow matching for paired single-cell multiomics"
+type: software
+authors:
+  - family-names: "Wang"
+    given-names: "Haochen"
+    email: "hcwang1996@gmail.com"
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/HaochenW/MultiFlow"
+url: "https://github.com/HaochenW/MultiFlow"
+keywords:
+  - single-cell multiomics
+  - flow matching
+  - RNA-seq
+  - ATAC-seq

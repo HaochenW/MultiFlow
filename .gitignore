@@ -1,0 +1,55 @@
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Packaging and virtual environments
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Experiment tracking, logs, and generated outputs
+logs/
+runs/
+outputs/
+wandb/
+*.log
+*.history.csv
+
+# Single-cell data, array exports, and model checkpoints
+*.h5ad
+*.h5mu
+*.loom
+*.npy
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+~$*

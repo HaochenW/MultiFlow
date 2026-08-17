@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multiflow-omics"
+dynamic = ["version"]
+description = "Coupled flow matching for paired single-cell RNA and ATAC latent states"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE*", "THIRD_PARTY_NOTICES.md"]
+authors = [
+  {name = "Haochen Wang", email = "hcwang1996@gmail.com"}
+]
+keywords = [
+  "single-cell",
+  "multiomics",
+  "flow-matching",
+  "RNA-seq",
+  "ATAC-seq",
+  "perturbation",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "numpy>=1.24",
+  "torch>=2.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/HaochenW/MultiFlow"
+Repository = "https://github.com/HaochenW/MultiFlow"
+Issues = "https://github.com/HaochenW/MultiFlow/issues"
+
+[project.optional-dependencies]
+analysis = [
+  "anndata>=0.9",
+  "mudata>=0.2",
+  "pandas>=2.0",
+  "scipy>=1.10",
+  "scikit-learn>=1.2",
+]
+dev = [
+  "build>=1.2",
+  "pytest>=8",
+  "ruff>=0.6",
+  "twine>=5",
+]
+
+[project.scripts]
+multiflow-omics = "multiflow_omics.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "multiflow_omics._version.__version__"}
+
+[tool.setuptools.package-data]
+multiflow_omics = ["py.typed"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
