@@ -11,7 +11,7 @@ import torch
 from scipy import sparse
 
 from multiflow_omics import __version__
-from multiflow_omics.cli import main
+from multiflow_omics.cli import _default_sampling_steps, _parser, main
 from multiflow_omics.h5mu import prepare_h5mu_for_write
 from multiflow_omics.legacy import migrate_legacy_checkpoint
 from multiflow_omics.models import ConditionalConcatFlow
@@ -55,6 +55,28 @@ def test_cli_version(capsys):
         main(["--version"])
     assert exit_info.value.code == 0
     assert __version__ in capsys.readouterr().out
+
+
+def test_cli_sampling_defaults_match_research_protocol():
+    parser = _parser()
+    generation = parser.parse_args(
+        ["train", "--input", "paired.h5mu", "--output", "run"]
+    )
+    perturbation = parser.parse_args(
+        [
+            "train",
+            "--input",
+            "paired.h5mu",
+            "--output",
+            "run",
+            "--model",
+            "perturbation",
+        ]
+    )
+    assert generation.sampling_steps is None
+    assert perturbation.sampling_steps is None
+    assert _default_sampling_steps(generation.model) == 100
+    assert _default_sampling_steps(perturbation.model) == 50
 
 
 def test_cli_creates_valid_h5mu_example(tmp_path, capsys):

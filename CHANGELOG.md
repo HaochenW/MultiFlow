@@ -19,9 +19,13 @@ after its first public release.
   labels retained in portable checkpoints.
 - Version-pinned, checksum-verified download command for the scDiffusion-X
   OpenProblem dataset.
+- A concise H5MU-first tutorial and an implementation audit linking the public
+  models to the executed research references.
 
 ### Changed
 
 - The concise user-facing command is now `multiflow`; the historical
   `multiflow-omics` command remains as a compatibility alias.
 - The main CLI no longer uses anonymous NPZ files for training or generation.
+- Default midpoint-solver steps now match the research protocols: 100 for
+  cell-state generation and 50 for perturbation prediction.

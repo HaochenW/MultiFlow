@@ -52,8 +52,11 @@ requires equal latent dimensions.
 The default `rng_mode="legacy_interleaved"` matches the research sampler's
 RNA/ATAC random-draw order. Record `seed`, `batch_size`, ODE `steps`, device,
 and package version because all are part of exact stochastic reproduction.
-The perturbation experiments used 50 midpoint steps. The generation CLI uses
-200 midpoint steps by default and records the chosen value in every output.
+The cell-state generation experiments used 100 midpoint steps and the
+perturbation experiments used 50. The CLI selects the corresponding default
+from the model type and records the chosen value in every output. Use
+`--sampling-steps` during training or `--steps` during generation only when an
+explicitly documented sensitivity analysis requires a different value.
 
 `rng_mode="batch_invariant"` makes a fixed seed independent of batch size by
 allocating the complete source state first. This option can use substantially

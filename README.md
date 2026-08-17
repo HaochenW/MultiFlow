@@ -67,6 +67,9 @@ The run directory contains `model.pt`, `history.csv`, and a readable
 `run.json`. The generated H5MU stores paired RNA/ATAC latent states, the fixed
 cell-type mapping, sampling seed, ODE steps, and checkpoint checksum.
 
+For a practical walk-through, real-data contract, perturbation input contract,
+and reproducibility checklist, see the [MultiFlow tutorial](docs/tutorial.md).
+
 ## H5MU contract
 
 MultiFlow uses one file instead of separate anonymous arrays:
@@ -115,6 +118,9 @@ and ATAC encoder bundle; do not train directly on the raw feature matrices.
 
 The latent flow objective, normalization, and sampling contracts are described
 in [docs/model_contract.md](docs/model_contract.md).
+
+The source-to-release implementation checks are summarized in
+[docs/implementation_audit.md](docs/implementation_audit.md).
 
 ## Python API
 

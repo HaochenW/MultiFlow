@@ -97,7 +97,15 @@ def _parser() -> argparse.ArgumentParser:
     train.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     train.add_argument("--seed", type=int, default=0)
     train.add_argument("--no-standardize", action="store_true")
-    train.add_argument("--sampling-steps", type=int, default=200)
+    train.add_argument(
+        "--sampling-steps",
+        type=int,
+        default=None,
+        help=(
+            "default midpoint ODE steps saved with the run "
+            "(default: 100 for generation, 50 for perturbation)"
+        ),
+    )
     train.add_argument(
         "--hash-input",
         action="store_true",
@@ -172,6 +180,11 @@ def _check_run_target(path: str) -> None:
     run = Path(path).expanduser().resolve()
     if run.exists() and any(run.iterdir()):
         raise FileExistsError(f"run directory is not empty: {run}")
+
+
+def _default_sampling_steps(model_type: str) -> int:
+    """Return the notebook-aligned midpoint solver budget."""
+    return 50 if model_type == "perturbation" else 100
 
 
 def _train(args: argparse.Namespace) -> None:
@@ -250,6 +263,11 @@ def _train(args: argparse.Namespace) -> None:
     }
     if args.hash_input:
         input_metadata["sha256"] = sha256_file(input_path)
+    default_sampling_steps = (
+        int(args.sampling_steps)
+        if args.sampling_steps is not None
+        else _default_sampling_steps(args.model)
+    )
     metadata: dict[str, object] = {
         "schema_version": 1,
         "input": input_metadata,
@@ -266,7 +284,7 @@ def _train(args: argparse.Namespace) -> None:
         "label_classes": data.label_classes,
         "perturbation_classes": data.perturbation_classes,
         "training": asdict(config),
-        "sampling": {"default_steps": int(args.sampling_steps)},
+        "sampling": {"default_steps": default_sampling_steps},
     }
     checkpoint = save_checkpoint(
         run / "model.pt",
@@ -359,7 +377,8 @@ def _generate(args: argparse.Namespace) -> None:
         name="perturbation",
         required=bool(perturbation_classes),
     )
-    default_steps = int(metadata.get("sampling", {}).get("default_steps", 200))
+    fallback_steps = _default_sampling_steps(str(model_config.get("model_type")))
+    default_steps = int(metadata.get("sampling", {}).get("default_steps", fallback_steps))
     steps = default_steps if args.steps is None else int(args.steps)
     standardizer_present = standardizer is not None
     standardization_inverted = standardizer_present and not args.keep_standardized
