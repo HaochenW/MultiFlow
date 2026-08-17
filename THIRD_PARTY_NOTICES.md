@@ -4,6 +4,11 @@ MultiFlow depends on NumPy and PyTorch, which are distributed under their own
 licenses. Dependency packages are not vendored in this repository; their
 license texts accompany their respective distributions.
 
+The optional OpenProblem tutorial download is the version 3 scDiffusion-X
+dataset hosted on Figshare (DOI `10.6084/m9.figshare.28582061.v3`, file ID
+`52945733`). The data are distributed separately under CC BY 4.0 and are not
+included in this repository or Python distribution.
+
 The paired residual and bidirectional cross-attention architecture in
 `src/multiflow_omics/models.py` was adapted from the scDiffusion-X multimodal
 backbone and the corresponding MultiFlow research implementation. The audited

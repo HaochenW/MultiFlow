@@ -438,6 +438,7 @@ def _migration_info(
 ) -> dict[str, Any]:
     epoch = envelope.get("completed_epochs", envelope.get("epoch"))
     labels = envelope.get("label_classes")
+    perturbations = envelope.get("perturbation_classes")
     info: dict[str, Any] = {
         "source_name": source.name,
         "container": container,
@@ -451,6 +452,8 @@ def _migration_info(
     }
     if isinstance(labels, (list, tuple)):
         info["label_classes"] = [str(item) for item in labels]
+    if isinstance(perturbations, (list, tuple)):
+        info["perturbation_classes"] = [str(item) for item in perturbations]
     if "heldout_cell_type" in envelope:
         info["heldout_cell_type"] = str(envelope["heldout_cell_type"])
     return info
@@ -511,8 +514,43 @@ def migrate_legacy_checkpoint(
         trust_source=trust_source,
     )
     output_metadata: dict[str, Any] = {"legacy_migration": info}
+    for key in ("label_classes", "perturbation_classes"):
+        if key in info:
+            output_metadata[key] = list(info[key])
     if metadata is not None:
         output_metadata.update(dict(metadata))
+    config = model.get_config()
+    expected_mappings = {
+        "label_classes": (
+            config.get("num_contexts")
+            if config.get("model_type") == "perturbation"
+            else config.get("num_classes")
+        ),
+        "perturbation_classes": (
+            config.get("num_perturbations")
+            if config.get("model_type") == "perturbation"
+            else None
+        ),
+    }
+    for key, expected in expected_mappings.items():
+        if expected is None:
+            continue
+        classes = output_metadata.get(key)
+        if classes is None:
+            warnings.warn(
+                f"legacy checkpoint requires {int(expected)} {key}, but their names "
+                "were not stored; provide the mapping during migration before using "
+                "the generate CLI",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+        if not isinstance(classes, (list, tuple)) or len(classes) != int(expected):
+            observed = len(classes) if isinstance(classes, (list, tuple)) else "not a list"
+            raise LegacyCheckpointError(
+                f"{key} must contain exactly {int(expected)} names; observed {observed}"
+            )
+        output_metadata[key] = [str(item) for item in classes]
     epoch = info.get("epoch")
     return save_checkpoint(
         destination,
@@ -521,4 +559,3 @@ def migrate_legacy_checkpoint(
         epoch=None if epoch is None else int(epoch),
         metadata=output_metadata,
     )
-

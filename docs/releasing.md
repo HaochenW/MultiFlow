@@ -12,7 +12,7 @@ git init
 git add .
 git commit -m "Initial public MultiFlow release"
 git branch -M main
-git remote add origin https://github.com/HaochenW/MultiFlow.git
+git remote add origin https://github.com/liuq-lab/MultiFlow.git
 git push -u origin main
 ```
 

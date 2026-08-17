@@ -52,18 +52,18 @@ requires equal latent dimensions.
 The default `rng_mode="legacy_interleaved"` matches the research sampler's
 RNA/ATAC random-draw order. Record `seed`, `batch_size`, ODE `steps`, device,
 and package version because all are part of exact stochastic reproduction.
-The perturbation experiments used 50 midpoint steps; the general CLI default
-is 100.
+The perturbation experiments used 50 midpoint steps. The generation CLI uses
+200 midpoint steps by default and records the chosen value in every output.
 
 `rng_mode="batch_invariant"` makes a fixed seed independent of batch size by
 allocating the complete source state first. This option can use substantially
 more device memory for very large sample counts.
 
-## Out of scope for version 0.1
+## Encoder boundary in version 0.1
 
-Version 0.1 does not bundle the dataset-specific scDiffusion/scDiffusion-X
-encoders and decoders. They require tightly pinned external releases and
-distinct raw-count/log-normalized input contracts. Keeping them outside the
-core wheel prevents hidden preprocessing, feature-order changes, and fragile
-default dependencies. A future optional adapter package can add audited H5MU
-end-to-end workflows.
+Version 0.1 uses H5MU for paired input/output and validates the raw-count and
+binary matrix contract, but does not bundle dataset-specific
+scDiffusion/scDiffusion-X encoder weights. These weights require tightly pinned
+features, configurations, and scale factors. Until the audited bundle is
+released, users must place encoder latents in the explicit H5MU `obsm` keys;
+the package never performs hidden preprocessing or silently uses raw `X`.

@@ -1,121 +1,127 @@
 # MultiFlow
 
-MultiFlow learns a conditional vector field over **paired RNA and ATAC latent
-states**. The package contains the latent-level model, flow-matching training,
-ODE sampling, and portable checkpoint utilities used by the MultiFlow method.
+[![CI](https://github.com/liuq-lab/MultiFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/liuq-lab/MultiFlow/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Pre-release notice:** this source tree is an alpha research package. Review
-> the release checklist below before publishing a new version.
+MultiFlow learns a coupled vector field for paired single-cell RNA and ATAC
+states. It supports cell-type-conditioned generation and
+perturbation-conditioned prediction while keeping the two modalities paired.
 
-## Scope
+> **Alpha release.** The flow model and portable H5MU interface are ready for
+> testing. Paper encoder checkpoints will be released separately after their
+> feature order and scale contracts are finalized.
 
-MultiFlow expects paired, finite, two-dimensional latent arrays whose rows
-refer to the same cells in the same order. It does **not** normalize raw counts,
-select features, or bundle RNA/ATAC encoders and decoders. Those steps remain
-explicit so that feature order, input scale, model provenance, and training
-scope can be audited independently.
+## Install
 
-The command-line interface accepts an NPZ file with:
-
-- `rna`: RNA latents with shape `(n_cells, rna_dim)`;
-- `atac`: ATAC latents with shape `(n_cells, atac_dim)`;
-- `labels` (optional): zero-based cell-context labels;
-- `perturbations` (perturbation model): zero-based perturbation labels, with
-  label `0` reserved for control; and
-- `context_matrix` (perturbation model): one context embedding per label.
-
-The default training command standardizes each modality feature-wise using
-statistics estimated from the supplied training latents. Sampling reverses
-that standardization before writing the output unless
-`--keep-standardized` is passed.
-
-## Which model is MultiFlow?
-
-The public `MultiFlow` API is the paired, bidirectional cross-attention model
-used in the cell-state experiments. `MultiFlowPerturbation` extends the same
-coupled vector field with cell-context and perturbation embeddings.
-`MultiFlowConcat` is retained as an explicitly named ablation; it is not
-presented as the cross-attention architecture. See
-[docs/model_contract.md](docs/model_contract.md) for the exact contracts.
-
-## Installation
-
-From a source checkout:
+Install the current GitHub version:
 
 ```bash
-python -m pip install -e .
+python -m pip install "git+https://github.com/liuq-lab/MultiFlow.git"
 ```
 
-For tests and release checks:
+After the first PyPI release, the shorter installation command will be:
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install multiflow-omics
 ```
 
-Create a small example input if desired:
+The installed command is simply `multiflow`. The PyPI distribution uses the
+longer name because `multiflow` is already registered by an unrelated project.
+
+## Quick start
+
+Create a small paired H5MU example:
 
 ```bash
-python examples/make_toy_latents.py
+multiflow data example --output toy_multiflow.h5mu
 ```
 
-## Train and sample latent states
-
-Train a cell-state model:
+Validate cell pairing, raw scales, and latent representations:
 
 ```bash
-multiflow-omics train-latents \
-  --input paired_train_latents.npz \
-  --output checkpoints/multiflow.pt \
-  --model cell-state \
-  --epochs 600
+multiflow data validate toy_multiflow.h5mu
 ```
 
-Generate paired latent states for cell-context label `2`:
+Train a cell-type-conditioned model:
 
 ```bash
-multiflow-omics sample-latents \
-  --checkpoint checkpoints/multiflow.pt \
-  --output generated_label_2.npz \
-  --n 1000 \
-  --label 2 \
-  --steps 100
+multiflow train \
+  --input toy_multiflow.h5mu \
+  --output runs/toy \
+  --epochs 20 \
+  --device cpu
 ```
 
-Inspect checkpoint metadata:
+Generate paired states using a cell-type name:
 
 ```bash
-multiflow-omics inspect-checkpoint --checkpoint checkpoints/multiflow.pt
+multiflow generate \
+  --run runs/toy \
+  --output generated_B_cell.h5mu \
+  --cell-type "B cell" \
+  --n 100 \
+  --device cpu
 ```
 
-Convert a historical research checkpoint before publishing it:
+The run directory contains `model.pt`, `history.csv`, and a readable
+`run.json`. The generated H5MU stores paired RNA/ATAC latent states, the fixed
+cell-type mapping, sampling seed, ODE steps, and checkpoint checksum.
+
+## H5MU contract
+
+MultiFlow uses one file instead of separate anonymous arrays:
+
+```text
+paired.h5mu
+├── rna.X                         raw RNA counts
+├── atac.X                        binary ATAC accessibility
+├── rna.obs["cell_type"]          biological condition
+├── rna.obsm["X_multiflow"]       RNA latent state
+└── atac.obsm["X_multiflow"]      ATAC latent state
+```
+
+RNA and ATAC `obs_names` must be identical and in the same order. Raw `X` is
+never silently substituted for a missing encoder representation. See
+[the complete H5MU contract](docs/h5mu_contract.md).
+
+## OpenProblem data
+
+The paired scDiffusion-X OpenProblem dataset can be downloaded directly:
 
 ```bash
-multiflow-omics migrate-checkpoint \
-  --source trusted_legacy_checkpoint.pt \
-  --output checkpoints/multiflow_v1.pt
+multiflow data download openproblem \
+  --output data/openproblem_filtered.h5mu \
+  --accept-license
 ```
 
-Migration uses PyTorch's safe weights-only loader by default. Only add
-`--trust-source` for a legacy pickle whose provenance you have independently
-verified. Raw historical state dictionaries often lack latent normalization
-statistics; supply the four original training-only arrays with
-`--standardizer-npz` before using decoded outputs.
+This is a version-pinned **8.38 GB** download from Figshare. The downloader
+supports resuming, checks the expected file size and MD5, and publishes the
+file only after verification.
 
-The output NPZ contains paired `rna` and `atac` latent arrays. Decode them with
-the exact encoder/decoder release and feature order used to create the training
-latents.
+- DOI: [10.6084/m9.figshare.28582061.v3](https://doi.org/10.6084/m9.figshare.28582061.v3)
+- Source: [scDiffusion-X](https://github.com/EperLuo/scDiffusion-X)
+- License: CC BY 4.0
+
+The upstream file contains raw RNA counts and binary ATAC profiles, but not
+MultiFlow encoder latents. Run `multiflow data validate` to inspect it. To
+reproduce the paper pipeline, add latents produced by the exact released RNA
+and ATAC encoder bundle; do not train directly on the raw feature matrices.
+
+## Models
+
+- `cell-state` (default): bidirectional cross-attention MultiFlow.
+- `perturbation`: adds context and perturbation embeddings.
+- `concat`: concatenation architecture retained for benchmark reproduction.
+
+The latent flow objective, normalization, and sampling contracts are described
+in [docs/model_contract.md](docs/model_contract.md).
 
 ## Python API
 
 ```python
-from multiflow_omics import MultiFlow, TrainingConfig, fit, seed_everything
+from multiflow_omics import MultiFlow, TrainingConfig, fit
 
-seed_everything(0)  # seed before model construction
-model = MultiFlow(
-    rna_dim=rna_latents.shape[1],
-    atac_dim=atac_latents.shape[1],
-    num_classes=n_cell_types,
-)
+model = MultiFlow(rna_dim=128, atac_dim=128, num_classes=4)
 result = fit(
     model,
     rna_latents,
@@ -125,29 +131,10 @@ result = fit(
 )
 ```
 
-The default sampler uses the historical batched random-draw order. For exact
-reproduction, record both `seed` and `batch_size`. An optional
-`rng_mode="batch_invariant"` is available when identical samples across batch
-sizes are more important than minimizing device memory.
-
-## Reproducibility requirements
-
-For a published analysis, record all of the following outside the checkpoint:
-
-1. dataset accession and immutable split manifest;
-2. RNA and ATAC feature names in order;
-3. preprocessing and encoder input scales;
-4. encoder/decoder versions and hashes;
-5. latent dimensions and training-only normalization statistics;
-6. label-to-integer mappings; and
-7. package version, seed, optimizer settings, and sampling steps.
-
-Do not publish cells, raw data, private paths, access tokens, trained weights,
-or dataset-derived embeddings unless their data-use terms permit it.
-
 ## Development
 
 ```bash
+python -m pip install -e ".[dev]"
 ruff check .
 pytest
 python -m build
@@ -155,13 +142,9 @@ twine check dist/*
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The complete release
-procedure is in [docs/releasing.md](docs/releasing.md).
+[docs/releasing.md](docs/releasing.md).
 
 ## Citation
 
-Citation metadata is provided in [CITATION.cff](CITATION.cff). Replace the
-temporary developer-group entry with the final author list and add the paper
-DOI before the first public release.
-
-
+Citation metadata are provided in [CITATION.cff](CITATION.cff). The paper DOI
+will be added when available.

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "multiflow-omics"
 dynamic = ["version"]
-description = "Coupled flow matching for paired single-cell RNA and ATAC latent states"
+description = "Coupled flow matching for paired single-cell multiomics"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -32,21 +32,22 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
+  "anndata>=0.9",
+  "h5py>=3.8",
+  "mudata>=0.2",
   "numpy>=1.24",
+  "pandas>=2.0",
+  "scipy>=1.10",
   "torch>=2.1",
 ]
 
 [project.urls]
-Homepage = "https://github.com/HaochenW/MultiFlow"
-Repository = "https://github.com/HaochenW/MultiFlow"
-Issues = "https://github.com/HaochenW/MultiFlow/issues"
+Homepage = "https://github.com/liuq-lab/MultiFlow"
+Repository = "https://github.com/liuq-lab/MultiFlow"
+Issues = "https://github.com/liuq-lab/MultiFlow/issues"
 
 [project.optional-dependencies]
 analysis = [
-  "anndata>=0.9",
-  "mudata>=0.2",
-  "pandas>=2.0",
-  "scipy>=1.10",
   "scikit-learn>=1.2",
 ]
 dev = [
@@ -57,6 +58,7 @@ dev = [
 ]
 
 [project.scripts]
+multiflow = "multiflow_omics.cli:main"
 multiflow-omics = "multiflow_omics.cli:main"
 
 [tool.setuptools.packages.find]

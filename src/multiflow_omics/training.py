@@ -20,6 +20,7 @@ class TrainingConfig:
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     standardize: bool = True
     noise_mode: str = "auto"
+    reseed: bool = True
 
     def __post_init__(self) -> None:
         if self.epochs < 1 or self.batch_size < 1 or self.learning_rate <= 0:
@@ -39,9 +40,9 @@ class TrainingResult:
 def seed_everything(seed: int) -> None:
     """Seed NumPy and PyTorch before constructing a model.
 
-    Call this before model construction when using the Python API. ``fit``
-    calls it again to make the training random stream reproducible, while the
-    command-line interface calls it before both construction and training.
+    Call this before model construction when using the Python API. By default,
+    ``fit`` seeds its training stream; the command-line interface seeds once
+    before model construction and disables the second seed explicitly.
     """
     torch.manual_seed(int(seed))
     np.random.seed(int(seed))
@@ -112,7 +113,8 @@ def fit(
     straight-line conditional vector field.
     """
     config = config or TrainingConfig()
-    seed_everything(config.seed)
+    if config.reseed:
+        seed_everything(config.seed)
 
     rna_tensor = _as_tensor(rna, torch.float32)
     atac_tensor = _as_tensor(atac, torch.float32)

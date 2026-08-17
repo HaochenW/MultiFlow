@@ -28,6 +28,5 @@ data split, encoder/decoder version, and source license for changes that affect
 scientific results.
 
 Contributors must disclose code adapted from another project and preserve all
-required copyright and license notices. Until the copyright holders select a
-project license, contributions should not be redistributed outside the review
-process.
+required copyright and license notices. Contributions are accepted under the
+MIT License used by this repository.
