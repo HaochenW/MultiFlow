@@ -21,6 +21,10 @@ after its first public release.
   OpenProblem dataset.
 - A concise H5MU-first tutorial and an implementation audit linking the public
   models to the executed research references.
+- End-to-end paper workflows for training the generation RNA VAE and
+  multimodal AE, encoding raw paired profiles, and decoding generated states.
+- Leave-one-cell-type-out perturbation preparation and the executed
+  training-only post-sampling latent mean-shift correction.
 
 ### Changed
 

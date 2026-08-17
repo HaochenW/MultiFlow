@@ -2,7 +2,7 @@
 
 This document records the source-to-release checks performed before writing the
 public tutorial. It separates the executed model graph from inactive notebook
-experiments and from preprocessing that remains outside the package.
+experiments and documents the raw-profile encoder/decoder boundary.
 
 ## Reference hierarchy
 
@@ -49,12 +49,28 @@ CLI round trips.
 
 ## Explicit boundaries and corrected exploratory cells
 
-- The public package begins with paired encoder latents. It does not yet bundle
-  the paper RNA VAE, multimodal ATAC autoencoder, decoders, feature files, or
-  encoder scale factors.
-- The package does not create leave-one-cell-type-out splits or apply
-  benchmark-specific latent/profile corrections. These operations must remain
-  explicit and training-only.
+- The user-facing paper workflow begins with raw-count RNA and binary ATAC in
+  H5MU. `multiflow paper encode` creates the latent representations; the core
+  flow still consumes those explicit derived representations.
+- Generation RNA uses the scDiffusion/SCimilarity VAE after
+  `normalize_total(1e4)+log1p`. Generation ATAC uses the binary branch of the
+  scDiffusion-X multimodal AE. Perturbation uses the multimodal AE for both raw
+  RNA counts and binary ATAC. These task-specific scales are not interchangeable.
+- The release includes the audited RNA VAE architecture and wrappers around a
+  pinned scDiffusion-X checkout. It does not redistribute pretrained weights or
+  the processed GSE274113 H5MU.
+- `multiflow paper prepare-perturbation-fold` reproduces the executed notebook:
+  it removes held-out non-control cells from flow training, retains held-out
+  controls, and computes each cell-type context from all remaining flow-training
+  rows. The original run used one fixed multimodal AE before this flow-level
+  split; stricter fold-specific encoder refitting must be labeled as a different
+  protocol.
+- The executed perturbation workflow applies a post-sampling latent mean shift
+  before decoding. For each modality, the training perturbation-minus-control
+  mean is added to the held-out cell type's training control mean, and the
+  generated group is translated to that target (alpha 1). The correction uses
+  flow-training cells and held-out controls only; held-out perturbed cells are
+  never used.
 - The exploratory concat notebook assigns `x1_atac = rna_latent` in one cell.
   This is inconsistent with paired RNA/ATAC training and with the surrounding
   code. The corrected research module and release use `atac_latent`; the concat
@@ -67,5 +83,6 @@ CLI round trips.
   The release now selects 100 steps for cell-state generation and 50 for
   perturbation unless an explicit override is recorded.
 
-These boundaries are also stated in the README and tutorial so users cannot
-mistake generated latent states for decoded biological profiles.
+These boundaries are also stated in the README and tutorial. Generated latent
+states are an intermediate artifact; only `multiflow paper decode` writes the
+task-specific biological profile scale.

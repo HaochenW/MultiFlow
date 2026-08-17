@@ -50,6 +50,12 @@ Issues = "https://github.com/liuq-lab/MultiFlow/issues"
 analysis = [
   "scikit-learn>=1.2",
 ]
+paper = [
+  "PyYAML>=6.0",
+  "scanpy>=1.9",
+  "scikit-learn>=1.2",
+  "scvi-tools>=1.1",
+]
 dev = [
   "build>=1.2",
   "pytest>=8",

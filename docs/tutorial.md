@@ -1,163 +1,189 @@
 # MultiFlow tutorial
 
-This tutorial covers the public MultiFlow latent-flow package. It starts with a
-small H5MU file, then shows the exact input contract for a real paired dataset.
+MultiFlow has two tasks:
 
-> **Release scope.** MultiFlow trains and samples paired RNA/ATAC **latent
-> states**. Version 0.1 does not bundle the dataset-specific RNA VAE, ATAC
-> autoencoder, or profile decoders used in the paper. The package therefore
-> never substitutes raw counts for missing latents and never labels latent
-> output as gene expression or peak accessibility.
+1. **cell-state generation**: generate paired RNA and ATAC profiles for a cell
+   type; and
+2. **perturbation prediction**: predict paired RNA and ATAC responses for a
+   held-out cell type and perturbation.
+
+Both workflows start from biological profiles, not precomputed latent arrays:
+
+```text
+raw paired H5MU
+    -> task-specific RNA and ATAC encoders
+    -> paired 128-dimensional latent states
+    -> MultiFlow
+    -> the same task-specific decoders
+    -> generated RNA and ATAC profiles
+```
+
+`X_multiflow` is a derived intermediate created by the encoder command. Users
+should not construct it by hand.
 
 ## 1. Install
 
-Create a clean Python environment and install the current GitHub version:
+The paper workflow was run on Linux with a CUDA GPU. Clone MultiFlow and
+install the optional paper dependencies:
 
 ```bash
-python -m venv .venv
+git clone https://github.com/liuq-lab/MultiFlow.git
+cd MultiFlow
 python -m pip install --upgrade pip
-python -m pip install "git+https://github.com/liuq-lab/MultiFlow.git"
+python -m pip install -e ".[paper]"
 ```
 
-Activate the environment with `.venv\Scripts\Activate.ps1` on Windows or
-`source .venv/bin/activate` on Linux and macOS. Confirm the installation:
+MultiFlow uses the scDiffusion-X multimodal autoencoder. Clone the audited
+revision beside the repository:
 
 ```bash
-multiflow --version
+mkdir -p external
+git clone https://github.com/EperLuo/scDiffusion-X.git external/scDiffusion-X
+git -C external/scDiffusion-X checkout d60d928b635ab7a52ace030a641efd02137c193f
+python -m pip install -e external/scDiffusion-X/scdiffusionX
 ```
 
-Use a CUDA-enabled PyTorch installation for real datasets. The toy example
-below runs on CPU.
+The installed command is `multiflow`. The PyPI distribution is named
+`multiflow-omics` because `multiflow` is occupied by an unrelated package.
 
-## 2. Run the five-minute example
+## 2. Initial H5MU input
 
-Create a small paired H5MU file. It contains raw RNA counts, binary ATAC values,
-paired cell identifiers, cell types, and four-dimensional toy latents.
-
-```bash
-multiflow data example --output toy_multiflow.h5mu
-multiflow data validate toy_multiflow.h5mu
-```
-
-The validation report should contain:
-
-```text
-"paired_raw_contract_ok": true
-"latent_ready": true
-```
-
-Train a small cell-type-conditioned model:
-
-```bash
-multiflow train \
-  --input toy_multiflow.h5mu \
-  --output runs/toy \
-  --model cell-state \
-  --epochs 20 \
-  --batch-size 16 \
-  --hidden-dim 32 \
-  --device cpu
-```
-
-Generate 100 paired latent states for one cell type:
-
-```bash
-multiflow generate \
-  --run runs/toy \
-  --output generated_B_cell.h5mu \
-  --cell-type "B cell" \
-  --n 100 \
-  --device cpu
-```
-
-The run directory contains `model.pt`, `history.csv`, and `run.json`. The
-generated H5MU records the condition, seed, solver steps, checkpoint checksum,
-and latent standardization provenance.
-
-## 3. Prepare a real H5MU file
-
-MultiFlow requires one paired container:
+The initial file contains paired raw profiles and biological labels:
 
 ```text
 paired.h5mu
-├── rna.X                         raw RNA counts
-├── atac.X                        binary accessibility
-├── rna.obs["cell_type"]          cell-type condition
-├── rna.obsm["X_multiflow"]       RNA encoder latent
-└── atac.obsm["X_multiflow"]      ATAC encoder latent
+├── rna.X                    nonnegative integer RNA counts
+├── atac.X                   binary ATAC accessibility
+├── rna.obs["cell_type"]     cell-type name
+└── matching RNA/ATAC obs_names in the same order
 ```
 
-The RNA and ATAC `obs_names` must be identical and in the same order. The
-paper models use 128-dimensional latents for both modalities. RNA encoder
-preprocessing is total-count normalization to 10,000 followed by `log1p`; the
-ATAC encoder receives the binary accessibility matrix. Encoder feature order,
-weights, and preprocessing must remain fixed between training and decoding.
-
-If the encoder outputs are already in memory, store them directly in H5MU:
-
-```python
-import mudata as mu
-import numpy as np
-
-mdata = mu.read_h5mu("paired_raw.h5mu")
-rna_latent = np.asarray(rna_latent, dtype=np.float32)
-atac_latent = np.asarray(atac_latent, dtype=np.float32)
-
-assert rna_latent.shape == (mdata.n_obs, 128)
-assert atac_latent.shape == (mdata.n_obs, 128)
-
-mdata["rna"].obsm["X_multiflow"] = rna_latent
-mdata["atac"].obsm["X_multiflow"] = atac_latent
-mdata.write_h5mu("paired_multiflow.h5mu")
-```
-
-This snippet only stores encoder outputs; it does not define or replace the
-paper encoders. Validate the completed file before training:
+Perturbation data also require `rna.obs["perturbation"]`, with the control
+condition named `control`. Audit any input before training:
 
 ```bash
-multiflow data validate paired_multiflow.h5mu --json validation.json
+multiflow data validate paired.h5mu
 ```
 
-### OpenProblem download
+## 3. Task 1: cell-state generation
 
-Download the paired scDiffusion-X OpenProblem data when a real raw-data example is needed:
+### 3.1 Download and split OpenProblem
+
+Download the paired OpenProblem dataset used by scDiffusion-X. The file is
+8.38 GB; the command verifies its size and MD5 before publishing it:
 
 ```bash
+mkdir -p data
 multiflow data download openproblem \
   --output data/openproblem_filtered.h5mu \
   --accept-license
 ```
 
-The file is 8.38 GB and is pinned to Figshare record
-`10.6084/m9.figshare.28582061.v3`. It contains raw RNA counts and binary ATAC
-profiles, but not MultiFlow encoder latents. A validation result with
-`latent_ready: false` is therefore expected until the audited encoder outputs
-are added.
+Create the cell-type-stratified 80/20 split used by the benchmark. Split
+before fitting either encoder so test cells do not determine encoder or latent
+normalization parameters:
 
-## 4. Train the paper cell-state flow
+```bash
+python workflows/prepare_generation_data.py \
+  --input data/openproblem_filtered.h5mu \
+  --output-dir data/openproblem \
+  --train-fraction 0.8 \
+  --seed 20260717
+```
 
-The following values match the cell-state training protocol: two modality
-branches, three bidirectional cross-attention modules, hidden width 512, two
-residual blocks per path, 600 epochs, batch size 512, and Adam with learning
-rate `1e-4`.
+This writes `train.h5mu`, `test.h5mu`, `split_manifest.csv` and
+`split_metadata.json`.
 
-| Setting | Cell-state generation | Perturbation prediction |
-|---|---:|---:|
-| RNA / ATAC latent width | 128 / 128 | 128 / 128 |
-| Hidden width | 512 | 512 |
-| Residual blocks per path | 2 | 2 |
-| Cross-attention feature width | 64 | 64 |
-| Training epochs | 600 | 600 |
-| Training batch size | 512 | 512 |
-| Adam learning rate | 1e-4 | 1e-4 |
-| Gaussian source | independent by modality | independent by modality |
-| Midpoint ODE steps | 100 | 50 |
-| Sampling batch size | 512 | 256 |
+### 3.2 Train the RNA VAE
+
+For generation, RNA counts are total-count normalized to 10,000 and `log1p`
+transformed inside the trainer. The VAE has three 1,024-unit layers and a
+128-dimensional L2-normalized latent state. Its decoder reconstructs
+nonnegative normalized log-expression.
+
+Download and extract the SCimilarity annotation weights used to initialize
+the transferable hidden layers:
+
+```bash
+curl -L \
+  "https://zenodo.org/records/8286452/files/annotation_model_v1.tar.gz?download=1" \
+  -o external/annotation_model_v1.tar.gz
+tar -xzf external/annotation_model_v1.tar.gz -C external
+```
+
+The directory must contain `encoder.ckpt`, `decoder.ckpt` and
+`gene_order.tsv`. Fine-tune on training cells only:
+
+```bash
+python workflows/train_rna_vae.py \
+  --train-h5mu data/openproblem/train.h5mu \
+  --scimilarity-model-dir external/annotation_model_v1 \
+  --output-dir runs/openproblem/rna_vae \
+  --max-steps 200000 \
+  --checkpoint-every 50000 \
+  --batch-size 128 \
+  --seed 1234 \
+  --device cuda
+```
+
+The final checkpoint is
+`runs/openproblem/rna_vae/rna_vae_step_199999.pt`. If an earlier checkpoint is
+selected, use a validation subset of the training split, not the test cells.
+
+### 3.3 Train the ATAC autoencoder
+
+Generation uses the ATAC branch of a scDiffusion-X multimodal autoencoder.
+RNA raw counts and binary ATAC are passed to this autoencoder; the ATAC branch
+has a 128-dimensional state and a Bernoulli decoder.
+
+```bash
+python workflows/train_multimodal_ae.py \
+  --scdiffusion-x-root external/scDiffusion-X \
+  --train-h5mu data/openproblem/train.h5mu \
+  --output-dir runs/openproblem/multimodal_ae \
+  --encoder-config workflows/encoder_multimodal_128.yaml \
+  --dataset-name openproblem \
+  --epochs 300 \
+  --seed 20260717
+```
+
+The stable checkpoint is
+`runs/openproblem/multimodal_ae/checkpoints/final.ckpt`.
+
+### 3.4 Encode the training profiles
+
+This command performs both encoder calls. It applies
+`normalize_total(1e4)+log1p` only to the RNA VAE input and passes binary ATAC
+directly to the multimodal AE. Checkpoint hashes and encoder scale factors are
+stored in the output H5MU.
+
+```bash
+multiflow paper encode \
+  --task generation \
+  --input data/openproblem/train.h5mu \
+  --output data/openproblem/train_encoded.h5mu \
+  --scdiffusion-x-root external/scDiffusion-X \
+  --multimodal-ae-checkpoint runs/openproblem/multimodal_ae/checkpoints/final.ckpt \
+  --encoder-config workflows/encoder_multimodal_128.yaml \
+  --rna-vae-checkpoint runs/openproblem/rna_vae/rna_vae_step_199999.pt \
+  --device cuda
+```
+
+Only this derived file contains `rna.obsm["X_multiflow"]` and
+`atac.obsm["X_multiflow"]`.
+
+### 3.5 Train MultiFlow
+
+MultiFlow fits independent Gaussian-to-data paths for RNA and ATAC. Separate
+branches exchange information through three bidirectional cross-attention
+modules. The target velocity is the endpoint difference along the linear path
+between Gaussian noise and each observed latent state; RNA and ATAC
+mean-squared velocity losses are added.
 
 ```bash
 multiflow train \
-  --input paired_multiflow.h5mu \
-  --output runs/cell_state \
+  --input data/openproblem/train_encoded.h5mu \
+  --output runs/openproblem/multiflow_generation \
   --model cell-state \
   --condition-key cell_type \
   --epochs 600 \
@@ -167,64 +193,121 @@ multiflow train \
   --num-blocks 2 \
   --cross-attention-dim 64 \
   --sampling-steps 100 \
-  --device cuda \
   --seed 0 \
+  --device cuda \
   --hash-input
 ```
 
-By default, each RNA and ATAC latent feature is standardized with statistics
-estimated from the supplied training cells. The statistics are saved in the
-checkpoint and inverted after sampling. Do not use `--no-standardize` for the
-paper protocol.
+Latent means and standard deviations are estimated from training cells and
+saved in `model.pt`. They are inverted automatically after sampling.
 
-## 5. Generate a cell type
-
-Use a biological name from the training H5MU rather than an anonymous integer:
+### 3.6 Generate and decode paired profiles
 
 ```bash
 multiflow generate \
-  --run runs/cell_state \
-  --output generated_cd4_t.h5mu \
+  --run runs/openproblem/multiflow_generation \
+  --output runs/openproblem/generated_cd4_latent.h5mu \
   --cell-type "CD4+ T activated" \
   --n 1000 \
   --steps 100 \
   --batch-size 512 \
-  --device cuda \
-  --seed 0
+  --seed 0 \
+  --device cuda
+
+multiflow paper decode \
+  --task generation \
+  --input runs/openproblem/generated_cd4_latent.h5mu \
+  --reference data/openproblem/train_encoded.h5mu \
+  --output runs/openproblem/generated_cd4_profiles.h5mu \
+  --scdiffusion-x-root external/scDiffusion-X \
+  --multimodal-ae-checkpoint runs/openproblem/multimodal_ae/checkpoints/final.ckpt \
+  --encoder-config workflows/encoder_multimodal_128.yaml \
+  --rna-vae-checkpoint runs/openproblem/rna_vae/rna_vae_step_199999.pt \
+  --seed 0 \
+  --device cuda
 ```
 
-Sampling starts from independent RNA and ATAC Gaussian states and uses the
-midpoint ODE solver. The output is in the original encoder latent scale because
-the saved feature standardization is inverted automatically. Apply the same
-RNA and ATAC decoders used to create the training latents to obtain biological
-profiles.
+Decoded RNA is a nonnegative normalized-log reconstruction. Decoded ATAC is a
+Bernoulli sample and therefore contains only 0 and 1.
 
-## 6. Perturbation-conditioned flow
+## 4. Task 2: perturbation prediction
 
-Perturbation training needs a **training-only** H5MU file. A leave-one-cell-type
-out experiment must remove the held-out perturbed cells before computing any
-standardization or context statistics. In addition to paired latents, the file
-must contain:
+### 4.1 Prepare the perturbation H5MU
 
-```text
-rna.obs["cell_type"]
-rna.obs["perturbation"]
-mdata.uns["multiflow_context_matrix"]
-mdata.uns["multiflow_context_classes"]
+The paper uses processed GSE274113 paired multiome data. The processed H5MU is
+not currently hosted by this repository, so do not substitute OpenProblem:
+
+```bash
+export PERTURBATION_H5MU=/path/to/GSE274113_filtered.h5mu
+multiflow data validate "$PERTURBATION_H5MU"
 ```
 
-The context matrix contains one concatenated RNA/ATAC mean latent vector per
-cell type, computed from the training split. Its row order must exactly equal
-the string array in `multiflow_context_classes`. The perturbation named
-`control` is always assigned index 0 and contributes a zero perturbation
-embedding.
+For a public release, upload the processed file to Zenodo or Figshare, not
+GitHub. Upload these items together:
 
-Train the perturbation flow:
+- `GSE274113_filtered.h5mu`;
+- `SHA256SUMS.txt`;
+- `dataset_manifest.json` with cell, gene and peak counts, matrix scales,
+  feature identifiers, preprocessing version and required `obs` columns; and
+- `README_data.md` citing GSE274113 and describing peak merging and filtering.
+
+After the record receives a DOI, add its version-pinned URL, byte size and
+checksum to `src/multiflow_omics/datasets.py`. Until then, this tutorial uses a
+local path rather than a fabricated URL.
+
+### 4.2 Train and run the perturbation encoder
+
+Perturbation prediction does **not** use the generation RNA VAE. Both RNA and
+ATAC are encoded by the scDiffusion-X multimodal AE: RNA uses a
+negative-binomial raw-count decoder and ATAC uses a Bernoulli decoder.
+
+```bash
+python workflows/train_multimodal_ae.py \
+  --scdiffusion-x-root external/scDiffusion-X \
+  --train-h5mu "$PERTURBATION_H5MU" \
+  --output-dir runs/perturbation/multimodal_ae \
+  --encoder-config workflows/encoder_multimodal_128.yaml \
+  --dataset-name GSE274113 \
+  --epochs 100 \
+  --seed 20260717
+
+multiflow paper encode \
+  --task perturbation \
+  --input "$PERTURBATION_H5MU" \
+  --output data/GSE274113_encoded.h5mu \
+  --scdiffusion-x-root external/scDiffusion-X \
+  --multimodal-ae-checkpoint runs/perturbation/multimodal_ae/checkpoints/final.ckpt \
+  --encoder-config workflows/encoder_multimodal_128.yaml \
+  --device cuda
+```
+
+The original leave-one-cell-type-out notebook used one fixed multimodal AE and
+then applied the holdout to flow training. If encoder fitting is part of the
+evaluation split, create the raw fold first and retrain the AE within each
+fold. Do not claim fold-level encoder isolation unless that run was performed.
+
+### 4.3 Build one leave-one-cell-type-out fold
+
+The notebook removes all non-control cells of the held-out type from flow
+training; its control cells remain. Each context is the mean concatenated
+RNA/ATAC encoder state over the remaining flow-training rows.
+
+```bash
+multiflow paper prepare-perturbation-fold \
+  --input data/GSE274113_encoded.h5mu \
+  --output data/GSE274113_CD4T_fold.h5mu \
+  --held-out-cell-type "CD4+ T activated" \
+  --condition-key cell_type \
+  --perturbation-key perturbation \
+  --control-perturbation control
+```
+
+### 4.4 Train, predict and decode
 
 ```bash
 multiflow train \
-  --input perturbation_train_multiflow.h5mu \
-  --output runs/perturbation \
+  --input data/GSE274113_CD4T_fold.h5mu \
+  --output runs/perturbation/CD4T \
   --model perturbation \
   --condition-key cell_type \
   --perturbation-key perturbation \
@@ -236,63 +319,85 @@ multiflow train \
   --num-blocks 2 \
   --cross-attention-dim 64 \
   --sampling-steps 50 \
-  --device cuda \
-  --seed 0
-```
+  --seed 0 \
+  --device cuda
 
-Generate one held-out context and perturbation:
-
-```bash
 multiflow generate \
-  --run runs/perturbation \
-  --output generated_heldout.h5mu \
+  --run runs/perturbation/CD4T \
+  --output runs/perturbation/CD4T_STAT1_latent_uncorrected.h5mu \
   --cell-type "CD4+ T activated" \
   --perturbation "STAT1" \
   --n 500 \
   --steps 50 \
   --batch-size 256 \
-  --device cuda \
-  --seed 0
+  --seed 0 \
+  --device cuda
+
+multiflow paper debias-perturbation \
+  --input runs/perturbation/CD4T_STAT1_latent_uncorrected.h5mu \
+  --training-fold data/GSE274113_CD4T_fold.h5mu \
+  --output runs/perturbation/CD4T_STAT1_latent.h5mu \
+  --held-out-cell-type "CD4+ T activated" \
+  --perturbation "STAT1" \
+  --condition-key cell_type \
+  --perturbation-key perturbation \
+  --control-perturbation control \
+  --alpha 1
+
+multiflow paper decode \
+  --task perturbation \
+  --input runs/perturbation/CD4T_STAT1_latent.h5mu \
+  --reference data/GSE274113_CD4T_fold.h5mu \
+  --output runs/perturbation/CD4T_STAT1_profiles.h5mu \
+  --scdiffusion-x-root external/scDiffusion-X \
+  --multimodal-ae-checkpoint runs/perturbation/multimodal_ae/checkpoints/final.ckpt \
+  --encoder-config workflows/encoder_multimodal_128.yaml \
+  --batch-size 2048 \
+  --seed 0 \
+  --device cuda
 ```
 
-The public package fits and samples the paired perturbation flow, but does not
-automatically create leave-one-cell-type-out splits, run the external
-encoders/decoders, or apply benchmark-specific post-processing. Keep those
-steps explicit so held-out data cannot leak into training statistics.
+The control perturbation is index 0 and its embedding is fixed to zero. Before
+decoding, the paper workflow applies a training-only latent mean shift. For
+each modality, it estimates the mean perturbation effect from the flow-training
+cells, adds that effect to the held-out cell type's control mean, and shifts
+the generated group to this target mean. The default `--alpha 1` uses the full
+estimated effect. No held-out perturbed cells are used. RNA is then decoded as
+a raw-count expectation; ATAC is a binary Bernoulli output.
 
-## 7. Reproducibility checklist
+## 5. Paper settings
 
-Before comparing runs, confirm that all items below are unchanged:
+| Setting | Generation | Perturbation |
+|---|---:|---:|
+| RNA encoder | 128-d RNA VAE | 128-d multimodal AE RNA branch |
+| RNA encoder input | normalize 1e4 + log1p | raw counts |
+| ATAC encoder | 128-d multimodal AE ATAC branch | same |
+| ATAC encoder input | binary | binary |
+| Flow hidden width | 512 | 512 |
+| Residual blocks per branch | 2 | 2 |
+| Cross-attention feature width | 64 | 64 |
+| Flow epochs | 600 | 600 |
+| Batch size | 512 | 512 |
+| Adam learning rate | 1e-4 | 1e-4 |
+| Midpoint ODE steps | 100 | 50 |
+| Sampling batch size | 512 | 256 |
+| Post-sampling latent mean shift | none | training-only, alpha = 1 |
 
-- paired cell order and feature order;
-- RNA normalization and ATAC binarization used by the encoders;
-- encoder and decoder checkpoint hashes;
-- latent dimensions and H5MU representation keys;
-- label and perturbation class mappings in `run.json`;
-- training split used to estimate latent means and standard deviations;
-- model type, epoch count, batch size, learning rate, and random seed; and
-- solver steps, generation batch size, and sampling seed.
+At each integration step, RNA queries attend to ATAC keys and values, and
+ATAC queries attend to RNA keys and values. The two vector fields are updated
+inside one coupled system; the modalities are not generated independently.
 
-For a strict stochastic replay, keep the same `--batch-size` and use the
-default `legacy_interleaved` RNG mode. Use `--rng-mode batch_invariant` only
-when reproducibility across different sampling batch sizes is more important
-than matching the original random-draw order.
+## 6. Reproducibility checks
 
-## 8. Common errors
+Keep the raw H5MU checksum, split manifest, exact feature order, matrix scales,
+encoder configuration and checkpoint hashes, scDiffusion-X scale factors,
+flow latent statistics, label mappings, training settings and sampling
+settings with every result. `run.json` and H5MU metadata record these items.
+Never exchange a decoder checkpoint after training the flow.
 
-**`latent_ready` is false.** One or both `X_multiflow` representations are
-missing, non-finite, or have the wrong number of rows.
+## 7. Advanced: latent-only API
 
-**Cell identifiers do not match.** Reorder both modalities to the same paired
-`obs_names`; do not rely on implicit row alignment.
-
-**Unknown cell type or perturbation.** Inspect `run.json` and use the exact
-stored biological name.
-
-**CUDA memory error.** Reduce generation `--batch-size`. For an exact replay,
-remember that the default RNG mode treats batch size as part of the stochastic
-protocol.
-
-**Need gene/peak profiles.** The generated file contains latent states. Decode
-with the same audited encoder bundle used for training; version 0.1 does not
-ship a generic decoder.
+The lower-level `multiflow train` and `multiflow generate` commands remain
+useful when audited encoder latents already exist. Their input contract is in
+[H5MU contract](h5mu_contract.md). This is an internal interface, not the
+recommended starting point for a new user.

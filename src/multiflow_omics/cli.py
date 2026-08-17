@@ -27,6 +27,12 @@ from .h5mu import (
 from .legacy import migrate_legacy_checkpoint
 from .models import CellStateFlow, ConditionalConcatFlow, PerturbationFlow
 from .normalization import LatentStandardizer
+from .paper import (
+    debias_perturbation_h5mu,
+    decode_paper_h5mu,
+    encode_paper_h5mu,
+    prepare_perturbation_fold,
+)
 from .sampling import sample_paired_latents
 from .training import TrainingConfig, fit, seed_everything
 
@@ -161,6 +167,69 @@ def _parser() -> argparse.ArgumentParser:
         help="ordered perturbation names; index 0 must be the control",
     )
     migrate.add_argument("--trust-source", action="store_true")
+
+    paper = subparsers.add_parser(
+        "paper",
+        help="run the task-specific raw-profile encoder and decoder workflow",
+    )
+    paper_commands = paper.add_subparsers(dest="paper_command", required=True)
+    encode = paper_commands.add_parser(
+        "encode",
+        help="encode raw RNA/ATAC profiles with the paper encoders",
+    )
+    encode.add_argument("--task", choices=["generation", "perturbation"], required=True)
+    encode.add_argument("--input", required=True)
+    encode.add_argument("--output", required=True)
+    encode.add_argument("--scdiffusion-x-root", required=True)
+    encode.add_argument("--multimodal-ae-checkpoint", required=True)
+    encode.add_argument("--encoder-config", required=True)
+    encode.add_argument("--rna-vae-checkpoint", default=None)
+    encode.add_argument("--condition-key", default="cell_type")
+    encode.add_argument("--batch-size", type=int, default=2048)
+    encode.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+
+    fold = paper_commands.add_parser(
+        "prepare-perturbation-fold",
+        help="remove held-out non-control cells and build the notebook context matrix",
+    )
+    fold.add_argument("--input", required=True)
+    fold.add_argument("--output", required=True)
+    fold.add_argument("--held-out-cell-type", required=True)
+    fold.add_argument("--condition-key", default="cell_type")
+    fold.add_argument("--perturbation-key", default="perturbation")
+    fold.add_argument("--control-perturbation", default="control")
+
+    debias = paper_commands.add_parser(
+        "debias-perturbation",
+        help="apply the paper training-only perturbation mean-shift correction",
+    )
+    debias.add_argument("--input", required=True, help="generated latent H5MU")
+    debias.add_argument("--training-fold", required=True)
+    debias.add_argument("--output", required=True)
+    debias.add_argument("--held-out-cell-type", required=True)
+    debias.add_argument("--perturbation", required=True)
+    debias.add_argument("--condition-key", default="cell_type")
+    debias.add_argument("--perturbation-key", default="perturbation")
+    debias.add_argument("--control-perturbation", default="control")
+    debias.add_argument("--alpha", type=float, default=1.0)
+    debias.add_argument("--min-cells", type=int, default=5)
+
+    decode = paper_commands.add_parser(
+        "decode",
+        help="decode generated latents with the matching paper decoders",
+    )
+    decode.add_argument("--task", choices=["generation", "perturbation"], required=True)
+    decode.add_argument("--input", required=True, help="generated latent H5MU")
+    decode.add_argument("--reference", required=True, help="encoded training H5MU")
+    decode.add_argument("--output", required=True)
+    decode.add_argument("--scdiffusion-x-root", required=True)
+    decode.add_argument("--multimodal-ae-checkpoint", required=True)
+    decode.add_argument("--encoder-config", required=True)
+    decode.add_argument("--rna-vae-checkpoint", default=None)
+    decode.add_argument("--condition-key", default="cell_type")
+    decode.add_argument("--batch-size", type=int, default=2048)
+    decode.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    decode.add_argument("--seed", type=int, default=0)
     return parser
 
 
@@ -447,7 +516,7 @@ def _validate_data(args: argparse.Namespace) -> None:
     if not report["latent_ready"]:
         print(
             "note: raw paired data are valid, but encoder latents are absent; "
-            "add rna/atac obsm['X_multiflow'] before training"
+            "run `multiflow paper encode` before flow training"
         )
 
 
@@ -518,6 +587,65 @@ def _migrate(args: argparse.Namespace) -> None:
             )
 
 
+def _paper(args: argparse.Namespace) -> None:
+    if args.paper_command == "encode":
+        output = encode_paper_h5mu(
+            input_path=args.input,
+            output_path=args.output,
+            task=args.task,
+            scdiffusionx_root=args.scdiffusion_x_root,
+            multimodal_ae_checkpoint=args.multimodal_ae_checkpoint,
+            encoder_config=args.encoder_config,
+            rna_vae_checkpoint=args.rna_vae_checkpoint,
+            condition_key=args.condition_key,
+            device=args.device,
+            batch_size=args.batch_size,
+        )
+        print(f"saved encoded paper input: {output}")
+    elif args.paper_command == "prepare-perturbation-fold":
+        output = prepare_perturbation_fold(
+            input_path=args.input,
+            output_path=args.output,
+            held_out_cell_type=args.held_out_cell_type,
+            condition_key=args.condition_key,
+            perturbation_key=args.perturbation_key,
+            control_perturbation=args.control_perturbation,
+        )
+        print(f"saved perturbation training fold: {output}")
+    elif args.paper_command == "debias-perturbation":
+        output = debias_perturbation_h5mu(
+            generated_path=args.input,
+            training_fold_path=args.training_fold,
+            output_path=args.output,
+            held_out_cell_type=args.held_out_cell_type,
+            perturbation=args.perturbation,
+            condition_key=args.condition_key,
+            perturbation_key=args.perturbation_key,
+            control_perturbation=args.control_perturbation,
+            alpha=args.alpha,
+            min_cells=args.min_cells,
+        )
+        print(f"saved debiased perturbation latents: {output}")
+    elif args.paper_command == "decode":
+        output = decode_paper_h5mu(
+            generated_path=args.input,
+            reference_path=args.reference,
+            output_path=args.output,
+            task=args.task,
+            scdiffusionx_root=args.scdiffusion_x_root,
+            multimodal_ae_checkpoint=args.multimodal_ae_checkpoint,
+            encoder_config=args.encoder_config,
+            rna_vae_checkpoint=args.rna_vae_checkpoint,
+            condition_key=args.condition_key,
+            device=args.device,
+            batch_size=args.batch_size,
+            seed=args.seed,
+        )
+        print(f"saved decoded RNA/ATAC profiles: {output}")
+    else:  # pragma: no cover - argparse restricts the accepted subcommands.
+        raise ValueError(f"unsupported paper command: {args.paper_command}")
+
+
 def main(argv: list[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     if args.command == "data" and args.data_command == "download":
@@ -532,6 +660,8 @@ def main(argv: list[str] | None = None) -> None:
         _generate(args)
     elif args.command == "inspect":
         _inspect(args)
+    elif args.command == "paper":
+        _paper(args)
     else:
         _migrate(args)
 

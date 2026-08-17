@@ -1,19 +1,32 @@
 # H5MU data contract
 
-MultiFlow uses H5MU as the public container for paired cells. The flow itself
-is trained on modality-specific latent states; raw matrices remain in the same
-file for provenance and later decoding.
+MultiFlow uses H5MU as the public container for paired cells. The user-facing
+paper workflow starts from raw profiles. A task-specific encoder command then
+creates a derived H5MU for latent flow training.
 
 ## Required structure
 
-An input must contain `rna` and `atac` modalities. Their `obs_names` must be
-unique and match exactly in both value and order. By default:
+An initial input must contain `rna` and `atac` modalities. Their `obs_names`
+must be unique and match exactly in value and order:
 
 - `rna.X` contains nonnegative integer raw counts;
 - `atac.X` contains only 0 and 1;
-- `rna.obs["cell_type"]` contains a non-missing cell-type name;
-- `rna.obsm["X_multiflow"]` contains finite RNA latents; and
-- `atac.obsm["X_multiflow"]` contains finite ATAC latents.
+- `rna.obs["cell_type"]` contains a non-missing cell-type name.
+
+Perturbation input also contains `rna.obs["perturbation"]`, including a named
+`control` condition. Run `multiflow paper encode` to create the derived
+representations:
+
+- generation RNA: 128-dimensional RNA VAE latent after
+  `normalize_total(1e4)+log1p`;
+- generation ATAC: 128-dimensional multimodal-AE ATAC latent from binary X;
+- perturbation RNA: 128-dimensional multimodal-AE RNA latent from raw counts;
+  and
+- perturbation ATAC: 128-dimensional multimodal-AE ATAC latent from binary X.
+
+The derived values are stored in `rna.obsm["X_multiflow"]` and
+`atac.obsm["X_multiflow"]`. They are intermediate data, not fields a new user
+is expected to supply manually.
 
 Use `--rna-representation` and `--atac-representation` to select another
 explicit `obsm` key. `X` can be selected explicitly, but is never used as an
@@ -36,7 +49,7 @@ MultiFlow then fits an additional feature-wise latent standardizer using the
 training cells. That standardizer and the string-to-integer condition mapping
 are stored in `model.pt` and `run.json`.
 
-For perturbation training, `obs["perturbation"]` (or the selected column) must
+For perturbation flow training, `obs["perturbation"]` (or the selected column) must
 contain the named control condition. The CLI reserves that condition as index
 0 and therefore as the exact zero perturbation vector. The context embedding
 matrix is stored in `uns["multiflow_context_matrix"]`; its row names must be
@@ -45,10 +58,12 @@ cell-type class order. MultiFlow rejects missing or reordered row labels.
 
 ## Generated files
 
-Version 0.1 writes paired generated **latent** states to `rna.X` and `atac.X`
-with `uns["matrix_scale"] = "latent"`. `mdata.uns["multiflow"]` records the
+The low-level generator writes paired generated latent states to `rna.X` and
+`atac.X` with `uns["matrix_scale"] = "latent"`. `mdata.uns["multiflow"]` records the
 checkpoint SHA256, model configuration, seed, ODE steps, batch size, label
 mapping, RNG mode, and whether latent standardization was inverted.
 
-Decoded gene/peak profiles require the exact encoder bundle used to create the
-training latents. They must not be inferred from a generic H5MU file.
+`multiflow paper decode` then uses the exact matching checkpoint bundle to
+write biological profile matrices. Generation RNA is normalized-log
+reconstruction and perturbation RNA is a raw-count expectation; ATAC is binary
+in both tasks. A decoder must never be inferred from an unrelated H5MU file.

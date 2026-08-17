@@ -12,9 +12,9 @@ MultiFlow learns a coupled vector field for paired single-cell RNA and ATAC
 states. It supports cell-type-conditioned generation and
 perturbation-conditioned prediction while keeping the two modalities paired.
 
-> **Alpha release.** The flow model and portable H5MU interface are ready for
-> testing. Paper encoder checkpoints will be released separately after their
-> feature order and scale contracts are finalized.
+> **Alpha release.** The flow model and raw-H5MU paper workflow are ready for
+> testing. The processed perturbation dataset is not yet hosted publicly; the
+> tutorial therefore requires a local path for that dataset.
 
 ## Install
 
@@ -33,64 +33,42 @@ python -m pip install multiflow-omics
 The installed command is simply `multiflow`. The PyPI distribution uses the
 longer name because `multiflow` is already registered by an unrelated project.
 
-## Quick start
+## Start with the tutorial
 
-Create a small paired H5MU example:
+The user-facing workflow starts from raw paired profiles. It trains the
+task-specific encoder(s), trains MultiFlow, samples paired latent states and
+decodes them back to RNA/ATAC profiles:
+
+```text
+raw H5MU -> VAE/AE -> MultiFlow -> matching decoders -> profile H5MU
+```
+
+The [full tutorial](docs/tutorial.md) gives complete commands for:
+
+- cell-type-conditioned generation on the public OpenProblem data; and
+- leave-one-cell-type-out perturbation prediction on processed GSE274113.
+
+The small latent-only example remains available for package smoke testing:
 
 ```bash
 multiflow data example --output toy_multiflow.h5mu
-```
-
-Validate cell pairing, raw scales, and latent representations:
-
-```bash
 multiflow data validate toy_multiflow.h5mu
 ```
 
-Train a cell-type-conditioned model:
-
-```bash
-multiflow train \
-  --input toy_multiflow.h5mu \
-  --output runs/toy \
-  --epochs 20 \
-  --device cpu
-```
-
-Generate paired states using a cell-type name:
-
-```bash
-multiflow generate \
-  --run runs/toy \
-  --output generated_B_cell.h5mu \
-  --cell-type "B cell" \
-  --n 100 \
-  --device cpu
-```
-
-The run directory contains `model.pt`, `history.csv`, and a readable
-`run.json`. The generated H5MU stores paired RNA/ATAC latent states, the fixed
-cell-type mapping, sampling seed, ODE steps, and checkpoint checksum.
-
-For a practical walk-through, real-data contract, perturbation input contract,
-and reproducibility checklist, see the [MultiFlow tutorial](docs/tutorial.md).
-
 ## H5MU contract
 
-MultiFlow uses one file instead of separate anonymous arrays:
+The initial user input is one paired raw-profile file:
 
 ```text
 paired.h5mu
 ├── rna.X                         raw RNA counts
 ├── atac.X                        binary ATAC accessibility
-├── rna.obs["cell_type"]          biological condition
-├── rna.obsm["X_multiflow"]       RNA latent state
-└── atac.obsm["X_multiflow"]      ATAC latent state
+└── rna.obs["cell_type"]          biological condition
 ```
 
-RNA and ATAC `obs_names` must be identical and in the same order. Raw `X` is
-never silently substituted for a missing encoder representation. See
-[the complete H5MU contract](docs/h5mu_contract.md).
+`multiflow paper encode` creates a derived H5MU containing the two
+`X_multiflow` representations. RNA and ATAC `obs_names` must be identical and
+in the same order. See [the complete H5MU contract](docs/h5mu_contract.md).
 
 ## OpenProblem data
 
@@ -110,10 +88,9 @@ file only after verification.
 - Source: [scDiffusion-X](https://github.com/EperLuo/scDiffusion-X)
 - License: CC BY 4.0
 
-The upstream file contains raw RNA counts and binary ATAC profiles, but not
-MultiFlow encoder latents. Run `multiflow data validate` to inspect it. To
-reproduce the paper pipeline, add latents produced by the exact released RNA
-and ATAC encoder bundle; do not train directly on the raw feature matrices.
+The upstream file contains the correct raw RNA counts and binary ATAC
+profiles. The tutorial splits it, trains the RNA VAE and ATAC AE, and runs
+`multiflow paper encode`; users do not create latent arrays manually.
 
 ## Models
 

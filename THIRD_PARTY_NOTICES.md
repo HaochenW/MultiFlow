@@ -24,6 +24,21 @@ root and a BSD 3-Clause license inside the Python package. Their precise scope
 should be confirmed with the upstream maintainers. Until then, both notices are
 retained for the adapted portions.
 
+The RNA VAE architecture and SCimilarity checkpoint-loading rules in
+`src/multiflow_omics/paper_encoders.py` and its training workflow were adapted
+from the scDiffusion repository:
+
+- scDiffusion, <https://github.com/EperLuo/scDiffusion>
+- relevant source: `VAE/VAE_model.py`, `VAE/VAE_train.py` and
+  `guided_diffusion/cell_datasets_loader.py`
+- upstream license: MIT, copyright (c) 2023 Erpai Luo
+
+The adaptation keeps the three 1,024-unit layers, 128-dimensional
+L2-normalized latent state, MSE reconstruction objective, AdamW settings and
+`normalize_total(1e4)+log1p` input transform used by the audited notebook. The
+wrapper replaces server-specific paths and records the effective random seed
+and input checksum.
+
 ## scDiffusion-X repository license
 
 MIT License
