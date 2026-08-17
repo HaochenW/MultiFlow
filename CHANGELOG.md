@@ -33,6 +33,8 @@ after its first public release.
 
 - The concise user-facing command is now `multiflow`; the historical
   `multiflow-omics` command remains as a compatibility alias.
+- `multiflow paper decode` now computes perturbation library-size statistics
+  from sparse RNA row sums and avoids densifying the complete reference H5MU.
 - The main CLI no longer uses anonymous NPZ files for training or generation.
 - Default midpoint-solver steps now match the research protocols: 100 for
   cell-state generation and 50 for perturbation prediction.

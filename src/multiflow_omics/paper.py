@@ -348,11 +348,10 @@ def _load_multimodal_decoder(
     encoder_config: Path,
     condition_key: str,
     device: str,
-) -> tuple[Any, dict[str, Any], Any]:
+) -> tuple[Any, Any]:
     _, mu = _paper_dependencies()
     _add_scdiffusionx(scdiffusionx_root)
     import yaml
-    from scdiffusionX.Autoencoder.data.scrnaseq_loader import RNAseqLoader
     from scdiffusionX.Autoencoder.models.base.encoder_model import EncoderModel
 
     reference = mu.read_h5mu(reference_path)
@@ -368,20 +367,39 @@ def _load_multimodal_decoder(
     )
     model.load_state_dict(_read_checkpoint(checkpoint, device=device)["state_dict"])
     model.to(device).eval()
-    loader = RNAseqLoader(
-        data_path=str(reference_path),
-        layer_key="X",
-        covariate_keys=[condition_key],
-        subsample_frac=1,
-        encoder_type="learnt_autoencoder",
-        multimodal=True,
-        is_binarized=True,
+    return model, reference
+
+
+def _log_library_stats_by_class(
+    rna: Any,
+    *,
+    condition_key: str,
+    classes: list[str],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Match scDiffusion-X RNA library statistics without densifying profiles."""
+    labels = rna.obs[condition_key].astype(str).to_numpy()
+    matrix = rna.X
+    row_sums = np.asarray(matrix.sum(axis=1), dtype=np.float64).reshape(-1)
+    if row_sums.shape[0] != rna.n_obs or not np.isfinite(row_sums).all():
+        raise ValueError("reference RNA library sizes are invalid")
+    if np.any(row_sums <= 0):
+        raise ValueError("reference RNA contains cells with zero library size")
+    log_sizes = np.log(row_sums)
+    means: list[float] = []
+    standard_deviations: list[float] = []
+    for name in classes:
+        values = log_sizes[labels == name]
+        if values.size == 0:
+            raise ValueError(f"reference has no RNA cells for condition {name!r}")
+        means.append(float(values.mean()))
+        # torch.std, used by scDiffusion-X, applies Bessel's correction.
+        standard_deviations.append(
+            float(values.std(ddof=1)) if values.size > 1 else float("nan")
+        )
+    return (
+        np.asarray(means, dtype=np.float32),
+        np.asarray(standard_deviations, dtype=np.float32),
     )
-    size_stats = {
-        "mean": loader.log_size_factor_mu[condition_key],
-        "sd": loader.log_size_factor_sd[condition_key],
-    }
-    return model, size_stats, reference
 
 
 @torch.no_grad()
@@ -412,7 +430,7 @@ def decode_paper_h5mu(
     generated = mu.read_h5mu(generated_file)
     rna_latent = _dense_float32(generated["rna"].X)
     atac_latent = _dense_float32(generated["atac"].X)
-    model, size_stats, reference = _load_multimodal_decoder(
+    model, reference = _load_multimodal_decoder(
         scdiffusionx_root=scdiffusionx_root,
         reference_path=reference_file,
         checkpoint=checkpoint,
@@ -437,6 +455,8 @@ def decode_paper_h5mu(
     rna_blocks: list[np.ndarray] = []
     atac_blocks: list[np.ndarray] = []
     rna_vae = None
+    library_mean: np.ndarray | None = None
+    library_sd: np.ndarray | None = None
     if task == "generation":
         if rna_vae_checkpoint is None:
             raise ValueError("generation decoding requires an RNA VAE checkpoint")
@@ -444,6 +464,12 @@ def decode_paper_h5mu(
             rna_vae_checkpoint,
             n_genes=reference["rna"].n_vars,
             device=device,
+        )
+    else:
+        library_mean, library_sd = _log_library_stats_by_class(
+            reference["rna"],
+            condition_key=condition_key,
+            classes=classes,
         )
 
     from torch.distributions import Bernoulli, Normal
@@ -466,9 +492,10 @@ def decode_paper_h5mu(
             z_rna = z_rna * rna_std10
             logits = model.decoder["rna"](z_rna)
             batch_labels = labels[start:stop]
-            mean = torch.as_tensor(size_stats["mean"])[batch_labels].to(device)
+            assert library_mean is not None and library_sd is not None
+            mean = torch.as_tensor(library_mean)[batch_labels].to(device)
             sd = torch.nan_to_num(
-                torch.as_tensor(size_stats["sd"])[batch_labels].to(device),
+                torch.as_tensor(library_sd)[batch_labels].to(device),
                 nan=1e-4,
                 posinf=1e-4,
                 neginf=1e-4,

@@ -45,6 +45,18 @@ python -m pip install -e external/scDiffusion-X/scdiffusionX
 
 The installed command is `multiflow`. The PyPI distribution is named
 `multiflow-omics` because `multiflow` is occupied by an unrelated package.
+Confirm that the paper workflow is available before starting a long run:
+
+```bash
+multiflow paper decode --help
+```
+
+If `paper` is not listed, update the checkout and reinstall it:
+
+```bash
+git pull
+python -m pip install -e ".[paper]"
+```
 
 ## 2. Initial H5MU input
 

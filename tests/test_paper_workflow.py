@@ -7,10 +7,12 @@ import mudata as mu
 import numpy as np
 import pandas as pd
 import torch
+from scipy import sparse
 
 from multiflow_omics import cli
 from multiflow_omics.h5mu import prepare_h5mu_for_write
 from multiflow_omics.paper import (
+    _log_library_stats_by_class,
     debias_perturbation_h5mu,
     prepare_perturbation_fold,
 )
@@ -49,6 +51,66 @@ def test_cli_routes_perturbation_debias_to_paper_workflow(
     assert captured["perturbation"] == "p1"
     assert captured["min_cells"] == 2
     assert "saved debiased perturbation latents" in capsys.readouterr().out
+
+
+def test_cli_routes_decode_to_paper_workflow(monkeypatch, tmp_path, capsys) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_decode(**kwargs):
+        captured.update(kwargs)
+        return tmp_path / "profiles.h5mu"
+
+    monkeypatch.setattr(cli, "decode_paper_h5mu", fake_decode)
+    cli.main(
+        [
+            "paper",
+            "decode",
+            "--task",
+            "generation",
+            "--input",
+            "generated.h5mu",
+            "--reference",
+            "encoded.h5mu",
+            "--output",
+            "profiles.h5mu",
+            "--scdiffusion-x-root",
+            "external/scDiffusion-X",
+            "--multimodal-ae-checkpoint",
+            "final.ckpt",
+            "--encoder-config",
+            "encoder.yaml",
+            "--rna-vae-checkpoint",
+            "rna.pt",
+        ]
+    )
+    assert captured["task"] == "generation"
+    assert captured["generated_path"] == "generated.h5mu"
+    assert captured["reference_path"] == "encoded.h5mu"
+    assert "saved decoded RNA/ATAC profiles" in capsys.readouterr().out
+
+
+def test_sparse_library_statistics_match_scdiffusionx_definition() -> None:
+    obs = pd.DataFrame(
+        {"cell_type": ["B", "B", "T", "T"]},
+        index=pd.Index(np.asarray(["a", "b", "c", "d"], dtype=object)),
+    )
+    rna = ad.AnnData(
+        sparse.csr_matrix(
+            np.asarray(
+                [[1, 1, 0], [2, 2, 0], [1, 2, 5], [2, 4, 10]],
+                dtype=np.float32,
+            )
+        ),
+        obs=obs,
+    )
+    mean, sd = _log_library_stats_by_class(
+        rna,
+        condition_key="cell_type",
+        classes=["B", "T"],
+    )
+    expected = [np.log([2.0, 4.0]), np.log([8.0, 16.0])]
+    assert np.allclose(mean, [values.mean() for values in expected])
+    assert np.allclose(sd, [values.std(ddof=1) for values in expected])
 
 
 def test_rna_vae_matches_paper_dimensions_and_unit_latent() -> None:
