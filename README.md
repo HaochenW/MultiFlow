@@ -164,12 +164,4 @@ Citation metadata is provided in [CITATION.cff](CITATION.cff). Replace the
 temporary developer-group entry with the final author list and add the paper
 DOI before the first public release.
 
-## Release checklist
 
-- [x] Project license added.
-- [x] Author name, repository URL, and contact details added.
-- [ ] Paper citation and DOI added when available.
-- [ ] Third-party derivation and notices are confirmed by the authors.
-- [ ] Checkpoints and metadata are scanned for local paths and restricted data.
-- [ ] Tests, lint, wheel/sdist builds, and `twine check` pass in clean
-      environments for supported Python versions.
