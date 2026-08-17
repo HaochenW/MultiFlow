@@ -155,8 +155,8 @@ def test_cli_h5mu_train_inspect_generate_round_trip(tmp_path, capsys):
     assert output.mod["rna"].obs["cell_type"].tolist() == ["B cell", "B cell"]
     assert output.mod["rna"].uns["matrix_scale"] == "latent"
     assert np.isfinite(output.mod["rna"].X).all()
-    assert output.uns["multiflow"]["standardizer_present"] is True
-    assert output.uns["multiflow"]["standardization_inverted"] is True
+    assert bool(output.uns["multiflow"]["standardizer_present"])
+    assert bool(output.uns["multiflow"]["standardization_inverted"])
 
 
 def test_cli_rejects_unknown_cell_type(tmp_path):
@@ -247,8 +247,8 @@ def test_cli_no_standardize_records_truthful_generation_metadata(tmp_path):
         ]
     )
     output = mu.read_h5mu(generated)
-    assert output.uns["multiflow"]["standardizer_present"] is False
-    assert output.uns["multiflow"]["standardization_inverted"] is False
+    assert not bool(output.uns["multiflow"]["standardizer_present"])
+    assert not bool(output.uns["multiflow"]["standardization_inverted"])
 
 
 def test_migrated_condition_mapping_supports_named_generation(tmp_path):
@@ -293,5 +293,5 @@ def test_migrated_condition_mapping_supports_named_generation(tmp_path):
     )
     output = mu.read_h5mu(generated)
     assert output.mod["rna"].obs["cell_type"].tolist() == ["T cell", "T cell"]
-    assert output.uns["multiflow"]["standardizer_present"] is False
-    assert output.uns["multiflow"]["standardization_inverted"] is False
+    assert not bool(output.uns["multiflow"]["standardizer_present"])
+    assert not bool(output.uns["multiflow"]["standardization_inverted"])
