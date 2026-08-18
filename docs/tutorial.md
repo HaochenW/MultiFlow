@@ -389,7 +389,7 @@ a raw-count expectation; ATAC is a binary Bernoulli output.
 | Flow hidden width | 512 | 512 |
 | Residual blocks per branch | 2 | 2 |
 | Cross-attention feature width | 64 | 64 |
-| Flow epochs | 1600 | 1600 |
+| Flow epochs | 1600 | 600 |
 | Batch size | 512 | 512 |
 | Adam learning rate | 1e-4 | 1e-4 |
 | Midpoint ODE steps | 100 | 50 |
