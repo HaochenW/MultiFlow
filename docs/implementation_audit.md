@@ -38,8 +38,10 @@ CLI round trips.
 
 - target path: linear interpolation between Gaussian source and encoded target;
 - objective: RNA MSE plus ATAC MSE with equal weight;
-- source noise: independent for the cross-attention and perturbation models;
-- concat ablation source: one shared Gaussian state for both modalities;
+- canonical source: one full-rank joint Gaussian state in the concatenated
+  RNA-ATAC latent space, sampled once and split into modality coordinate blocks;
+- concat ablation source: one replicated Gaussian block retained only for
+  historical reproducibility;
 - optimization: Adam, learning rate `1e-4`, batch size 512, 600 epochs;
 - latent normalization: per-feature mean and standard deviation estimated from
   training cells and inverted after sampling;

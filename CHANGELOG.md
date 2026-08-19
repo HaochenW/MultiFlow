@@ -1,5 +1,10 @@
 # Changelog
 
+- Define the canonical source as one full-rank joint Gaussian random variable
+  in the concatenated RNA-ATAC latent space. Training and default sampling now
+  draw this source once and split it into modality coordinate blocks; the old
+  two-call draw order remains available as `rng_mode="legacy_interleaved"`.
+
 All notable changes to MultiFlow will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

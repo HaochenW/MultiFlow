@@ -29,6 +29,18 @@ def test_sampling_is_repeatable_for_a_fixed_seed():
     torch.testing.assert_close(first[1], second[1])
 
 
+def test_default_joint_source_does_not_replicate_modality_blocks():
+    rna, atac = sample_paired_latents(
+        ZeroVelocity(4, 4, shared=False),
+        8,
+        steps=1,
+        batch_size=8,
+        device="cpu",
+        seed=23,
+    )
+    assert not torch.equal(rna, atac)
+
+
 def test_seeded_sampling_is_independent_of_batch_size():
     model = ZeroVelocity(3, 5, shared=False)
     small_batches = sample_paired_latents(
@@ -51,6 +63,30 @@ def test_seeded_sampling_is_independent_of_batch_size():
     )
     torch.testing.assert_close(small_batches[0], one_batch[0])
     torch.testing.assert_close(small_batches[1], one_batch[1])
+
+
+def test_explicit_legacy_mode_remains_repeatable():
+    model = ZeroVelocity(3, 5, shared=False)
+    first = sample_paired_latents(
+        model,
+        7,
+        steps=1,
+        batch_size=3,
+        device="cpu",
+        seed=29,
+        rng_mode="legacy_interleaved",
+    )
+    second = sample_paired_latents(
+        model,
+        7,
+        steps=1,
+        batch_size=3,
+        device="cpu",
+        seed=29,
+        rng_mode="legacy_interleaved",
+    )
+    torch.testing.assert_close(first[0], second[0])
+    torch.testing.assert_close(first[1], second[1])
 
 
 def test_sampling_does_not_emit_tensor_copy_warnings():

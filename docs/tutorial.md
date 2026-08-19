@@ -186,11 +186,13 @@ Only this derived file contains `rna.obsm["X_multiflow"]` and
 
 ### 3.5 Train MultiFlow
 
-MultiFlow fits independent Gaussian-to-data paths for RNA and ATAC. Separate
-branches exchange information through three bidirectional cross-attention
-modules. The target velocity is the endpoint difference along the linear path
-between Gaussian noise and each observed latent state; RNA and ATAC
-mean-squared velocity losses are added.
+MultiFlow starts from one joint Gaussian random variable in the concatenated
+RNA-ATAC latent space. Its RNA and ATAC coordinate blocks are marginally
+independent, while the two flow branches exchange information through three
+bidirectional cross-attention modules. The target velocity is the endpoint
+difference along the linear path between each block of the joint Gaussian
+source and the corresponding observed latent state; RNA and ATAC mean-squared
+velocity losses are added.
 
 ```bash
 multiflow train \

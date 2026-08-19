@@ -140,6 +140,7 @@ class CellStateFlow(nn.Module):
 
     model_type = "cell_state"
     requires_shared_base = False
+    source_distribution = "joint_standard_normal"
 
     def __init__(
         self,
@@ -432,10 +433,11 @@ class _ConcatInputResidualBlock(nn.Module):
 
 
 class ConditionalConcatFlow(nn.Module):
-    """Conditional concatenation ablation used in generation experiments."""
+    """Historical concat ablation with a replicated, rank-deficient base."""
 
     model_type = "concat"
     requires_shared_base = True
+    source_distribution = "replicated_shared_normal_legacy"
 
     def __init__(
         self,

@@ -131,8 +131,12 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--keep-standardized", action="store_true")
     generate.add_argument(
         "--rng-mode",
-        choices=["legacy_interleaved", "batch_invariant"],
-        default="legacy_interleaved",
+        choices=["joint", "legacy_interleaved", "batch_invariant"],
+        default="joint",
+        help=(
+            "joint samples one full-rank RNA-ATAC Gaussian source; "
+            "legacy_interleaved reproduces the historical draw order"
+        ),
     )
 
     inspect = subparsers.add_parser("inspect", help="print checkpoint metadata")

@@ -7,6 +7,7 @@ from typing import Literal
 import torch
 import torch.nn as nn
 
+from ._base import sample_joint_standard_normal
 from .normalization import LatentStandardizer
 
 
@@ -56,19 +57,22 @@ def sample_paired_latents(
     device: str | torch.device | None = None,
     seed: int = 0,
     standardizer: LatentStandardizer | None = None,
-    rng_mode: Literal["legacy_interleaved", "batch_invariant"] = "legacy_interleaved",
+    rng_mode: Literal["joint", "legacy_interleaved", "batch_invariant"] = "joint",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Generate paired latent states with midpoint ODE integration.
 
-    ``legacy_interleaved`` reproduces the random-draw order of the research
-    sampler and therefore treats ``batch_size`` as part of the stochastic
-    protocol. ``batch_invariant`` draws the complete initial state first; it
-    gives identical samples across batch sizes but uses O(n) device memory.
+    ``joint`` draws one full-rank Gaussian random variable in the concatenated
+    RNA-ATAC latent space per sampling batch and splits it into modality blocks.
+    ``legacy_interleaved`` reproduces the historical two-call random-draw order.
+    ``batch_invariant`` draws the complete joint initial state first; it gives
+    identical samples across batch sizes but uses O(n) device memory.
     """
     if n < 1 or steps < 1 or batch_size < 1:
         raise ValueError("n, steps, and batch_size must be positive")
-    if rng_mode not in {"legacy_interleaved", "batch_invariant"}:
-        raise ValueError("rng_mode must be legacy_interleaved or batch_invariant")
+    if rng_mode not in {"joint", "legacy_interleaved", "batch_invariant"}:
+        raise ValueError(
+            "rng_mode must be joint, legacy_interleaved, or batch_invariant"
+        )
     device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
     generator = torch.Generator(device=device)
     generator.manual_seed(seed)
@@ -97,12 +101,17 @@ def sample_paired_latents(
     )
     time_grid = torch.linspace(0, 1, steps + 1, device=device)
     if rng_mode == "batch_invariant":
-        base_rna = torch.randn((n, rna_dim), device=device, generator=generator)
-        base_atac = (
-            base_rna
-            if shared_noise
-            else torch.randn((n, atac_dim), device=device, generator=generator)
-        )
+        if shared_noise:
+            base_rna = torch.randn((n, rna_dim), device=device, generator=generator)
+            base_atac = base_rna
+        else:
+            base_rna, base_atac = sample_joint_standard_normal(
+                n,
+                rna_dim,
+                atac_dim,
+                device=device,
+                generator=generator,
+            )
     else:
         base_rna = base_atac = None
 
@@ -112,12 +121,23 @@ def sample_paired_latents(
         if rng_mode == "batch_invariant":
             rna = base_rna[start:end].clone()
             atac = base_atac[start:end].clone()
-        else:
+        elif rng_mode == "legacy_interleaved":
             rna = torch.randn((count, rna_dim), device=device, generator=generator)
             atac = (
                 rna.clone()
                 if shared_noise
                 else torch.randn((count, atac_dim), device=device, generator=generator)
+            )
+        elif shared_noise:
+            rna = torch.randn((count, rna_dim), device=device, generator=generator)
+            atac = rna.clone()
+        else:
+            rna, atac = sample_joint_standard_normal(
+                count,
+                rna_dim,
+                atac_dim,
+                device=device,
+                generator=generator,
             )
         label_batch = None if labels is None else labels[start:end]
         pert_batch = None if perturbations is None else perturbations[start:end]

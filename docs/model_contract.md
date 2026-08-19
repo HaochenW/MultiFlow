@@ -34,24 +34,34 @@ decoder.
 
 ## Flow objective
 
-For target latent state `x1`, Gaussian source `x0`, and time `t ~ U(0, 1)`,
-MultiFlow trains on the straight-line path
+For target paired latent state `x1 = (x1_R, x1_A)`, MultiFlow draws one joint
+Gaussian source
+
+```text
+x0 = (x0_R, x0_A) ~ N(0, I_(d_R + d_A))
+```
+
+and a time `t ~ U(0, 1)`. It then trains on the straight-line path
 
 ```text
 x_t = (1 - t) x0 + t x1
 v_t = x1 - x0
 ```
 
-and minimizes the sum of RNA and ATAC mean-squared velocity errors.
-Cell-state and perturbation models use independent Gaussian sources for the
-two modalities. The concat ablation uses one shared source and therefore
-requires equal latent dimensions.
+and minimizes the sum of RNA and ATAC mean-squared velocity errors. The RNA
+and ATAC blocks of `x0` are independent coordinate blocks of one full-rank
+joint random variable. Their dependence at the endpoint is learned by the
+coupled vector field and its bidirectional cross-attention modules. The concat
+ablation retains the historical replicated 128-dimensional source only for
+legacy reproducibility; it is not the canonical MultiFlow prior.
 
 ## Sampling protocol
 
-The default `rng_mode="legacy_interleaved"` matches the research sampler's
-RNA/ATAC random-draw order. Record `seed`, `batch_size`, ODE `steps`, device,
-and package version because all are part of exact stochastic reproduction.
+The default `rng_mode="joint"` samples one concatenated joint source per
+batch and splits it into RNA and ATAC coordinate blocks. Record `seed`,
+`batch_size`, ODE `steps`, device, and package version because all are part of
+exact stochastic reproduction. Use `rng_mode="legacy_interleaved"` only to
+reproduce the historical two-call RNA/ATAC random-draw order.
 The cell-state generation experiments used 100 midpoint steps and the
 perturbation experiments used 50. The CLI selects the corresponding default
 from the model type and records the chosen value in every output. Use

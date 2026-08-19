@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from ._base import sample_joint_standard_normal
 from .normalization import LatentStandardizer
 
 
@@ -25,8 +26,10 @@ class TrainingConfig:
     def __post_init__(self) -> None:
         if self.epochs < 1 or self.batch_size < 1 or self.learning_rate <= 0:
             raise ValueError("epochs, batch_size, and learning_rate must be positive")
-        if self.noise_mode not in {"auto", "independent", "shared"}:
-            raise ValueError("noise_mode must be auto, independent, or shared")
+        if self.noise_mode not in {"auto", "joint", "independent", "shared"}:
+            raise ValueError(
+                "noise_mode must be auto, joint, independent, or shared"
+            )
 
 
 @dataclass
@@ -108,9 +111,13 @@ def fit(
 ) -> TrainingResult:
     """Fit a MultiFlow vector field to paired latent states.
 
-    Inputs are target latent states.  A Gaussian source and a uniform flow time
-    are sampled for each optimization step, and the model regresses the
-    straight-line conditional vector field.
+    Inputs are target latent states.  For the canonical models, one joint
+    Gaussian source in the concatenated RNA-ATAC latent space and a uniform
+    flow time are sampled for each optimization step, and the model regresses
+    the straight-line conditional vector field.  The historical ``independent``
+    spelling is retained as an alias for the same full-rank joint Gaussian
+    distribution; ``shared`` denotes only the rank-deficient legacy concat
+    ablation.
     """
     config = config or TrainingConfig()
     if config.reseed:
@@ -160,7 +167,7 @@ def fit(
     if config.noise_mode != "auto":
         requested_shared = config.noise_mode == "shared"
         if requested_shared != model_requires_shared:
-            expected = "shared" if model_requires_shared else "independent"
+            expected = "shared" if model_requires_shared else "joint"
             raise ValueError(
                 f"{type(model).__name__} requires noise_mode={expected!r}; "
                 f"received {config.noise_mode!r}"
@@ -187,8 +194,13 @@ def fit(
                 base_rna = torch.randn_like(target_rna)
                 base_atac = base_rna.clone()
             else:
-                base_rna = torch.randn_like(target_rna)
-                base_atac = torch.randn_like(target_atac)
+                base_rna, base_atac = sample_joint_standard_normal(
+                    int(index.shape[0]),
+                    int(target_rna.shape[1]),
+                    int(target_atac.shape[1]),
+                    device=device,
+                    dtype=target_rna.dtype,
+                )
             time = torch.rand(index.shape[0], 1, device=device)
             state_rna = (1 - time) * base_rna + time * target_rna
             state_atac = (1 - time) * base_atac + time * target_atac
